@@ -1,0 +1,94 @@
+FROM clearlinux:latest
+
+ARG TERM=xterm
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+RUN echo -e "SlavaUkraini\nSlavaUkraini" | passwd -q
+RUN swupd update
+RUN swupd bundle-add c-basic \
+    devpkg-libusb \
+    libzmq \
+    devpkg-libzmq \
+    sudo \
+    wget \
+    git \
+    c-basic-static \
+    sysadmin-basic \
+    performance-tools \
+    nodejs-basic \
+    php-basic
+
+# Hacked rtl-sdr drivers
+WORKDIR /tmp/
+RUN git clone https://github.com/krakenrf/librtlsdr
+RUN mkdir -p librtlsdr/build
+WORKDIR /tmp/librtlsdr/build
+RUN cmake ../ -DINSTALL_UDEV_RULES=ON -DCMAKE_INSTALL_PREFIX=/usr
+RUN make
+RUN make install
+RUN cp ../rtl-sdr.rules /etc/udev/rules.d/
+RUN ldconfig
+RUN rm -fR /tmp/librtlsdr
+
+# KFR DSP library
+WORKDIR /tmp
+RUN git clone https://github.com/kfrlib/kfr.git --branch 4.2.1 --single-branch
+RUN mkdir -p krf/build
+WORKDIR /tmp/kfr/build
+RUN cmake -Wno-dev -DENABLE_CAPI_BUILD=ON -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release ..
+RUN make
+RUN mkdir /usr/include/kfr
+RUN cp /tmp/kfr/build/lib/* /usr/lib
+RUN cp /tmp/kfr/include/kfr/capi.h /usr/include/kfr
+RUN ldconfig
+RUN rm -fR /tmp/kfr
+
+WORKDIR /tmp
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+RUN chmod ug+x /tmp/Miniforge3-Linux-x86_64.sh
+RUN /tmp/Miniforge3-Linux-x86_64.sh -b -p /root/miniconda
+RUN eval "$(/root/miniconda/bin/conda shell.bash hook)"
+ENV PATH="/root/miniconda/bin:${PATH}"
+RUN conda config --set auto_activate_base false
+WORKDIR /root/
+RUN conda config --add channels intel
+RUN conda update --all
+RUN conda init bash
+RUN conda create -n kraken intelpython3_core python=3.9
+RUN conda run -n kraken conda install numba
+RUN conda run -n kraken conda install -c numba/label/dev numba-scipy
+RUN conda run -n kraken conda install configparser \
+    pyzmq
+RUN rm -fR /tmp/Miniforge3-Linux-x86_64.sh
+
+# HeIMDALL DAQ Firmware
+RUN mkdir /root/krakensdr
+WORKDIR /root/krakensdr
+RUN git clone -b development https://github.com/krakenrf/heimdall_daq_fw
+WORKDIR /root/krakensdr/heimdall_daq_fw/Firmware/_daq_core
+RUN conda run -n kraken make
+
+# DoA App
+WORKDIR /root/krakensdr
+RUN conda run -n kraken conda install quart \
+    pandas \
+    orjson \
+    matplotlib \
+    requests
+RUN conda run -n kraken pip3 install dash_bootstrap_components==1.1.0 \
+    quart_compress \
+    dash_devices \
+    scikit-rf \
+    pyargus
+RUN conda run -n kraken conda install dash==1.20.0 \
+    werkzeug==2.0.3
+RUN git clone https://github.com/mfkiwl/krakensdr_pr.git
+#RUN cp krakensdr_pr/util/kraken_pr_start.sh .
+#RUN cp krakensdr_pr/util/kraken_pr_stop.sh .
+
+# Housekeeping
+RUN conda run conda clean --all --yes
+RUN swupd bundle-remove --force c-basic \
+    git \
+    wget
+
+CMD /root/krakensdr/krakensdr_pr/util/kraken_pr_start.sh && sleep infinity

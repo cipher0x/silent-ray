@@ -15,7 +15,8 @@ RUN swupd bundle-add c-basic \
     sysadmin-basic \
     performance-tools \
     nodejs-basic \
-    php-basic
+    php-basic \
+    vim
 
 # Hacked rtl-sdr drivers
 WORKDIR /tmp/
@@ -78,17 +79,19 @@ RUN conda run -n kraken pip3 install dash_bootstrap_components==1.1.0 \
     quart_compress \
     dash_devices \
     scikit-rf \
-    pyargus
+    pyargus \
+    pyfftw
 RUN conda run -n kraken conda install dash==1.20.0 \
     werkzeug==2.0.3
-RUN git clone https://github.com/mfkiwl/krakensdr_pr.git
+RUN git clone https://github.com/cipher0x/krakensdr_pr.git
 #RUN cp krakensdr_pr/util/kraken_pr_start.sh .
 #RUN cp krakensdr_pr/util/kraken_pr_stop.sh .
 
 # Housekeeping
 RUN conda run conda clean --all --yes
-RUN swupd bundle-remove --force c-basic \
-    git \
-    wget
+#RUN swupd bundle-remove --force c-basic \
+#    git \
+#    wget
 
-CMD /root/krakensdr/krakensdr_pr/util/kraken_pr_start.sh && sleep infinity
+#CMD /root/krakensdr/krakensdr_pr/util/kraken_pr_start.sh && sleep infinity
+CMD sleep infinity
